@@ -35,7 +35,7 @@ This tool is used to modify and transform CUDA source codes. This README file pr
 
 
 
-6. Navigate to the build directory of the LLVM project and create make files with cmake. Enable clang-tools-extra option. This part only for once:
+6. Navigate to the build directory of the LLVM project and create make files with cmake. Enable clang-tools-extra option. You dont't need for this every changes in the code. You can just do step 7 for any source code changes after the first installation.
     ```bash
     sudo cmake -DLLVM_ENABLE_PROJECTS="clang-tools-extra;clang" -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" ../llvm
     ```
