@@ -33,11 +33,17 @@ This tool is used to modify and transform CUDA source codes. This README file pr
 
 5. Place the source code for the tool under the `CUDAIntegratedTransformerTool` directory.
 
-6. Finally, navigate to the build directory of the LLVM project and compile the tool by running the following commands:
+
+
+6. Navigate to the build directory of the LLVM project and create make files with cmake. Enable clang-tools-extra option. This part only for once:
     ```bash
-    cd /path/to/llvm-project/build
-    make
+    sudo cmake -DLLVM_ENABLE_PROJECTS="clang-tools-extra;clang" -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" ../llvm
     ```
+
+6. Finally, navigate to the build directory of the LLVM project and compile the tool by running the following commands. "-j 16 " for building with 16 core. :
+    ```bash
+    sudo make -j 16 install CUDAIntegratedTransformerTool
+    ```  
 
 ## Usage
 
@@ -55,8 +61,8 @@ When using the tool, you can utilize the following command line options:
 - `--remove_synch_thread_to_null`: Replaces __syncthreads() function calls with "NULL()". Example usage: `--remove_synch_thread_to_null`.
 - `--remove_synch_thread_to_empty`: Replaces __syncthreads() function calls with an empty string. Example usage: `--remove_synch_thread_to_empty`.
 - `--replace-with-syncwarp`: Replaces __syncthreads() function calls with __syncwarp(). Example usage: `--replace-with-syncwarp`.
-- `--atomic-add-to-atomic-add-block`: Replaces atomicAdd() function calls with atomicAddBlock(). Example usage: `--atomic-add-to-atomic-add-block`.
-- `--atomic-to-direct`: Replaces atomicAdd() function calls with direct operations. Example usage: `--atomic-to-direct`.
+- `--atomic-to-atomic-block`: Replaces atomic() function calls with atomic_block(). Example usage: `--atomic-to-atomic-block=true --atomic-block-indexes=1`.
+- `--atomic-to-direct`: Replaces atomicAdd() function calls with direct operations. Example usage: `--atomic-to-direct=true --atomic-direct-indexes=1`.
 - `--simplify-if-statements`: Simplifies function bodies by keeping only the first if statement body. Example usage: `--simplify-if-statements`.
 
 
