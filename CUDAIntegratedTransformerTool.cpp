@@ -45,8 +45,10 @@ cl::opt<bool> removeSynchThread("remove_synch_thread_to_null", cl::desc("Replace
 cl::opt<bool> compremoveSynchThread("remove_synch_thread_to_empty", cl::desc("Replace _synchthread() function with empty string"), cl::init(false));
 
 cl::opt<bool> replaceWithSyncWarp("replace-with-syncwarp", cl::desc("Replace __syncthreads() function calls with __syncwarp()"), cl::init(false));
-cl::opt<bool> replaceAtomicAddFunctiontoBlock("atomic-add-to-atomic-add-block", cl::desc("Replace atomicAdd() function with atomicAddBlock()"), cl::init(false));
-cl::opt<bool> replaceAtomicAddFunctiontoDirect("atomic-to-direct", cl::desc("Replace atomicAdd() function with direct operation"), cl::init(false));
+
+// Atomic
+cl::opt<bool> replaceAtomicFunctionToBlock("atomic-to-block", cl::desc("Replace atomic() function with atomic_block()"), cl::init(false));
+cl::opt<bool> replaceAtomicFunctiontoDirect("atomic-to-direct", cl::desc("Replace atomic() function with direct operation"), cl::init(false));
 
 cl::opt<bool> ConvertIfElseToIfBody("convert-if-else-to-if-body", cl::desc("Convert if-else statements to only if-body."), cl::init(false));
 cl::opt<bool> SimplifyIfStatements("simplify-if-statements", cl::desc("Simplify function bodies by keeping only the first if statement body."), cl::init(false));
@@ -57,12 +59,9 @@ cl::list<int> IfIndexes("if-indexes", cl::desc("Specify the index of the if stat
 cl::list<int> ElseIndexes("else-indexes", cl::desc("Specify the index of the else statement occurrence to modify"), cl::value_desc("index"));
 cl::list<int> ElseIfIndexes("elseif-indexes", cl::desc("Specify the index of the else if statement occurrence to modify"), cl::value_desc("index"));
 
-
-
-
-cl::list<int> AtomicAddBLOCKIndexes("atomicBLOCK-indexes", cl::desc("Specify the indices of the atomicAdd() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> AtomicAddDIRECTIndexes("atomicDIRECT-indexes", cl::desc("Specify the indices of the atomicAdd() occurrences to modify"), cl::value_desc("index"));
-
+// Atomic
+cl::list<int> AtomicBlockIndexes("atomicBlock-indexes", cl::desc("Specify the indices of the atomic() occurrences to modify"), cl::value_desc("index"));
+cl::list<int> AtomicDirectIndexes("atomicDirect-indexes", cl::desc("Specify the indices of the atomic() occurrences to modify"), cl::value_desc("index"));
 
 
 cl::list<int> DoubleIndexes("double-indexes", cl::desc("Specify the indices of the double variable occurrences to modify"), cl::value_desc("index"));
@@ -123,41 +122,42 @@ public:
     
 
     bool VisitCallExpr(CallExpr *E) {
-        if (removeSynchThread || compremoveSynchThread || replaceWithSyncWarp || replaceAtomicAddFunctiontoBlock || replaceAtomicAddFunctiontoDirect || synchcooperative || synchactive) {
-            if (FunctionDecl *FD = E->getDirectCallee()) {
-                if (FD->getNameAsString() == "__syncthreads") {
-                    currentSyncIndex++;
+        if (FunctionDecl *FD = E->getDirectCallee()) {
+            if (FD->getNameAsString() == "__syncthreads") {
+                currentSyncIndex++;
                     
-                    if (isIndexInList(SyncThreadsNULLIndexes, currentSyncIndex)) {
-                        _synchThreadtoNull(E);
-                    }
-
-                    if (isIndexInList(SyncThreadsEMPTYIndexes, currentSyncIndex)) {
-                        _synchThreadtoEmpty(E);
-                    }
-
-                    if (isIndexInList(SyncThreadsWARPIndexes, currentSyncIndex)) {
-                        _synchThreadto_syncwarp(E);
-                    }
-                    if (isIndexInList(SyncThreadsCOOPIndexes, currentSyncIndex)) {
-                        _synchThreadtoCooperative(E);
-                    } 
-                    if (isIndexInList(SyncThreadsACTIVEIndexes, currentSyncIndex)) {
-                        _synchThreadtoActive(E);
-                    }         
+                if (isIndexInList(SyncThreadsNULLIndexes, currentSyncIndex)) {
+                    _synchThreadtoNull(E);
                 }
-                else if (FD->getNameAsString() == "atomicAdd") {
+
+                if (isIndexInList(SyncThreadsEMPTYIndexes, currentSyncIndex)) {
+                    _synchThreadtoEmpty(E);
+                }
+
+                if (isIndexInList(SyncThreadsWARPIndexes, currentSyncIndex)) {
+                    _synchThreadto_syncwarp(E);
+                } 
+                if (isIndexInList(SyncThreadsCOOPIndexes, currentSyncIndex)) {
+                    _synchThreadtoCooperative(E);
+                } 
+                if (isIndexInList(SyncThreadsACTIVEIndexes, currentSyncIndex)) {
+                    _synchThreadtoActive(E);
+                }         
+                }
+                else if (FD->getNameAsString().substr(0,6) == "atomic") {
                     currentAtomicIndex++;
-                    if (isIndexInList(AtomicAddBLOCKIndexes, currentAtomicIndex)) {
-                        replaceAtomicAddFunction(E);
                     
+                    if (isIndexInList(AtomicBlockIndexes, currentAtomicIndex)) {
+                        replaceAtomicFunctionWithBlock(E);
+            
                     }
-                    if (isIndexInList(AtomicAddDIRECTIndexes, currentAtomicIndex)) {
+
+                    if (isIndexInList(AtomicDirectIndexes, currentAtomicIndex)) {
                         replaceAtomicAddWithDirectOperation(E);
                     }
-                }
             }
         }
+        
         return true;
     }
 
@@ -473,69 +473,129 @@ private:
         return true;
     }
 
-    bool replaceAtomicAddFunction(CallExpr *E) {
-        if (replaceAtomicAddFunctiontoBlock) {
-            if (FunctionDecl *FD = E->getDirectCallee()) {
-                if (FD->getNameAsString() == "atomicAdd") {
-                    std::string newText = "atomicAdd_block(";
-
-                    // Iterate over the arguments and append them to the newText string
-                    for (unsigned i = 0; i < E->getNumArgs(); ++i) {
-                        std::string argText = Lexer::getSourceText(CharSourceRange::getTokenRange(E->getArg(i)->getSourceRange()),
-                                                                  Context->getSourceManager(), Context->getLangOpts()).str();
-                        if (i > 0) {
-                            newText += ", ";
-                        }
-                        newText += argText;
-                    }
-                    newText += ")";
-
-                    // Replace the entire expression with the new function call
-                    SourceRange range = E->getSourceRange();
-                    R.ReplaceText(range, newText);
-
-                    return true; 
-                }
+    bool replaceAtomicFunctionWithBlock(CallExpr *E) {
+        
+        std::string newText = E->getDirectCallee()->getNameAsString() + "_block(";
+        
+        // Iterate over the arguments and append them to the newText string
+        for (unsigned i = 0; i < E->getNumArgs(); ++i) {
+            std::string argText = Lexer::getSourceText(CharSourceRange::getTokenRange(E->getArg(i)->getSourceRange()),
+                                                        Context->getSourceManager(), Context->getLangOpts()).str();
+            if (i > 0) {
+                newText += ", ";
             }
+            newText += argText;
         }
-        return false; // No replacement was made
+        newText += ")";
+
+        // Replace the entire expression with the new function call
+        SourceRange range = E->getSourceRange();
+        R.ReplaceText(range, newText);
+
+        return true; 
+       
     }
 
     bool replaceAtomicAddWithDirectOperation(CallExpr *CE) {
-        if (replaceAtomicAddFunctiontoDirect) {
-            if (FunctionDecl *FD = CE->getDirectCallee()) {
-                if (FD->getNameAsString() == "atomicAdd") {
-                    // Assuming atomicAdd has exactly two arguments
-                    if (CE->getNumArgs() != 2) {
-                        return false; // Safety check
-                    }
+        if (FunctionDecl *FD = CE->getDirectCallee()) {
 
-                    Expr *ptrExpr = CE->getArg(0);
-                    Expr *valueExpr = CE->getArg(1);
+            Expr *ptrExpr = CE->getArg(0);
+            Expr *valueExpr = CE->getArg(1);
 
-                    // Get the source text for the pointer expression and value expression
-                    std::string ptrText = Lexer::getSourceText(CharSourceRange::getTokenRange(ptrExpr->getSourceRange()), 
-                                                                Context->getSourceManager(), Context->getLangOpts()).str();
-                    std::string valueText = Lexer::getSourceText(CharSourceRange::getTokenRange(valueExpr->getSourceRange()), 
-                                                                 Context->getSourceManager(), Context->getLangOpts()).str();
+            // Get the source text for the pointer expression and value expression
+            std::string ptrText = Lexer::getSourceText(CharSourceRange::getTokenRange(ptrExpr->getSourceRange()), 
+                                                        Context->getSourceManager(), Context->getLangOpts()).str();
+            std::string valueText = Lexer::getSourceText(CharSourceRange::getTokenRange(valueExpr->getSourceRange()), 
+                                                            Context->getSourceManager(), Context->getLangOpts()).str();
 
-                    // Generate the new text to replace the atomicAdd call
-                    std::string newText;
-                    newText += ptrText + ";\n";  // Assign previous value
-                    newText += ptrText + " += " + valueText + ";\n"; // Update value
 
-                    // Find where to insert the new text
-                    SourceLocation startLoc = CE->getBeginLoc();
-                    SourceLocation endLoc = Lexer::getLocForEndOfToken(CE->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+            std::string newText{};
 
-                    // Replace the original atomicAdd call with the new lines of code
-                    R.ReplaceText(SourceRange(startLoc, endLoc), newText);
+            std::string functionName = FD->getNameAsString();
+            
+            if (functionName == "atomicAdd") {
 
-                    return true;
-                }
+                newText += ptrText + " += " + valueText + ";\n"; 
+
             }
+            else if (functionName == "atomicSub") {
+
+                newText += ptrText + " -= " + valueText + ";\n"; 
+
+            }
+
+            else if (functionName == "atomicExch") {
+
+                newText += ptrText + " = " + valueText + ";\n"; 
+
+            }
+
+            else if (functionName == "atomicMin") {
+
+                newText += ptrText + " = min(" + ptrText + ", " + valueText + ");\n"; 
+
+            }
+
+            else if (functionName == "atomicMax") {
+
+                newText += ptrText + " = max(" + ptrText + ", " + valueText + ");\n"; 
+
+            }
+
+            else if (functionName == "atomicInc") {
+
+                newText += ptrText + " = " + ptrText + " + 1;\n"; 
+
+            }
+
+            else if (functionName == "atomicDec") {
+
+                newText += ptrText + " = " + ptrText + " - 1;\n"; 
+
+            }
+
+            else if (functionName == "atomicCAS") {
+
+                Expr *valueExpr2 = CE->getArg(2);
+                std::string valueText2 = Lexer::getSourceText(CharSourceRange::getTokenRange(valueExpr2->getSourceRange()), 
+                                                            Context->getSourceManager(), Context->getLangOpts()).str();
+
+
+                newText += "if (" + ptrText + " == " + valueText + ") {\n";
+                newText += "\t"+ ptrText + " = " + valueText2 + ";\n";
+                newText += "\t}\n";
+            }
+            
+
+            else if (functionName == "atomicAND" ) {
+
+                newText += ptrText + " = " + ptrText + " & " + valueText + ";\n"; 
+
+            }
+
+            else if (functionName == "atomicOR") {
+
+                newText += ptrText + " = " + ptrText + " | " + valueText + ";\n"; 
+
+            }
+
+            else if (functionName == "atomicXOR") {
+
+                newText += ptrText + " = " + ptrText + " ^ " + valueText + ";\n";
+
+            }
+
+            // Find where to insert the new text
+            SourceLocation startLoc = CE->getBeginLoc();
+            SourceLocation endLoc = Lexer::getLocForEndOfToken(CE->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+
+            // Replace the original atomic call with the new lines of code
+            R.ReplaceText(SourceRange(startLoc, endLoc), newText);
+
+            return true;
+        
         }
-        return false;
+        
     }
 
     bool isCUDAKernelCall(CallExpr *CE)
@@ -645,4 +705,5 @@ int main(int argc, const char **argv) {
 
     return 0;
 }
+
 
