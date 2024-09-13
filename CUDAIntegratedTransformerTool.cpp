@@ -7,7 +7,6 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "llvm/Support/CommandLine.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/Basic/SourceLocation.h"
@@ -20,60 +19,58 @@
 
 using namespace clang;
 using namespace clang::tooling;
-using namespace llvm;
 using namespace std;
 
 static llvm::cl::OptionCategory MyToolCategory("my-tool options");
 
-static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
+static llvm::cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 
-cl::opt<std::string> ThreadsValue("threads", cl::desc("Specify the value to replace THREADS with"), cl::value_desc("value"), cl::init("32"));
+llvm::cl::opt<std::string> ThreadsValue("threads", llvm::cl::desc("Specify the value to replace THREADS with"), llvm::cl::value_desc("value"), llvm::cl::init("32"));
 
-cl::opt<int> ThreadReductionRatio("reduction-ratio", cl::desc("Specify the value for reduction for number of threads"), cl::init(0));
-cl::opt<bool> ConvertDoubleToFloat("convert-double-to-float", cl::desc("Convert double variables to float."), cl::init(false));
+llvm::cl::opt<int> ThreadReductionRatio("reduction-ratio", llvm::cl::desc("Specify the value for reduction for number of threads"), llvm::cl::init(0));
+llvm::cl::opt<bool> ConvertDoubleToFloat("convert-double-to-float", llvm::cl::desc("Convert double variables to float."), llvm::cl::init(false));
 
-cl::opt<bool> ChangeKernelCallParameter("change-Kernel", cl::desc("Change the number of threads inside the block"), cl::init(false));
-cl::opt<int> KernelParamNum("kernelParam-num", cl::desc("Specify which kernel parameter to modify (1 or 2)"), cl::init(2));
+llvm::cl::opt<bool> ChangeKernelCallParameter("change-Kernel", llvm::cl::desc("Change the number of threads inside the block"), llvm::cl::init(false));
+llvm::cl::opt<int> KernelParamNum("kernelParam-num", llvm::cl::desc("Specify which kernel parameter to modify (1 or 2)"), llvm::cl::init(2));
 
-cl::opt<bool> ChangeDim3("dim3", cl::desc("Change the parameters of dim3 declarations"), cl::init(false));
-cl::opt<int> NumDim3Changes("num-dim3-changes", cl::desc("Specify the number of dim3 declarations to change"), cl::value_desc("number"), cl::init(-1));
+llvm::cl::opt<bool> ChangeDim3("dim3", llvm::cl::desc("Change the parameters of dim3 declarations"), llvm::cl::init(false));
+llvm::cl::opt<int> NumDim3Changes("num-dim3-changes", llvm::cl::desc("Specify the number of dim3 declarations to change"), llvm::cl::value_desc("number"), llvm::cl::init(-1));
 
-cl::opt<std::string> Change_Variable_Name("change-var-name", cl::desc("Name of the variable to be changed"));
-cl::opt<bool> Change_Specific_Variable("change-specific", cl::desc("Change value of specific variable"), cl::init(false));
+llvm::cl::opt<std::string> Change_Variable_Name("change-var-name", llvm::cl::desc("Name of the variable to be changed"));
+llvm::cl::opt<bool> Change_Specific_Variable("change-specific", llvm::cl::desc("Change value of specific variable"), llvm::cl::init(false));
 
-cl::opt<bool> removeSynchThread("remove_synch_thread_to_null", cl::desc("Replace _synchthread() function with NULL()"), cl::init(false));
-cl::opt<bool> compremoveSynchThread("remove_synch_thread_to_empty", cl::desc("Replace _synchthread() function with empty string"), cl::init(false));
+llvm::cl::opt<bool> removeSynchThread("remove_synch_thread_to_null", llvm::cl::desc("Replace _synchthread() function with NULL()"), llvm::cl::init(false));
+llvm::cl::opt<bool> compremoveSynchThread("remove_synch_thread_to_empty", llvm::cl::desc("Replace _synchthread() function with empty string"), llvm::cl::init(false));
 
-cl::opt<bool> replaceWithSyncWarp("replace-with-syncwarp", cl::desc("Replace __syncthreads() function calls with __syncwarp()"), cl::init(false));
-
-// Atomic
-cl::opt<bool> replaceAtomicFunctionToBlock("atomic-to-block", cl::desc("Replace atomic() function with atomic_block()"), cl::init(false));
-cl::opt<bool> replaceAtomicFunctiontoDirect("atomic-to-direct", cl::desc("Replace atomic() function with direct operation"), cl::init(false));
-
-cl::opt<bool> ConvertIfElseToIfBody("convert-if-else-to-if-body", cl::desc("Convert if-else statements to only if-body."), cl::init(false));
-cl::opt<bool> SimplifyIfStatements("simplify-if-statements", cl::desc("Simplify function bodies by keeping only the first if statement body."), cl::init(false));
-cl::opt<bool> SimplifyElseStatements("simplify-else-statements", cl::desc("Simplify function bodies by keeping only the else statement body."), cl::init(false));
-cl::opt<bool> SimplifyElseIfStatements("simplify-else-if-statements", cl::desc("Simplify function bodies by keeping only the else if statement body."), cl::init(false));
-
-cl::list<int> IfIndexes("if-indexes", cl::desc("Specify the index of the if statement occurrence to modify"), cl::value_desc("index"));
-cl::list<int> ElseIndexes("else-indexes", cl::desc("Specify the index of the else statement occurrence to modify"), cl::value_desc("index"));
-cl::list<int> ElseIfIndexes("elseif-indexes", cl::desc("Specify the index of the else if statement occurrence to modify"), cl::value_desc("index"));
+llvm::cl::opt<bool> replaceWithSyncWarp("replace-with-syncwarp", llvm::cl::desc("Replace __syncthreads() function calls with __syncwarp()"), llvm::cl::init(false));
 
 // Atomic
-cl::list<int> AtomicBlockIndexes("atomicBlock-indexes", cl::desc("Specify the indices of the atomic() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> AtomicDirectIndexes("atomicDirect-indexes", cl::desc("Specify the indices of the atomic() occurrences to modify"), cl::value_desc("index"));
+llvm::cl::opt<bool> replaceAtomicFunctionToBlock("atomic-to-block", llvm::cl::desc("Replace atomic() function with atomic_block()"), llvm::cl::init(false));
+llvm::cl::opt<bool> replaceAtomicFunctiontoDirect("atomic-to-direct", llvm::cl::desc("Replace atomic() function with direct operation"), llvm::cl::init(false));
+
+llvm::cl::opt<bool> ConvertIfElseToIfBody("convert-if-else-to-if-body", llvm::cl::desc("Convert if-else statements to only if-body."), llvm::cl::init(false));
+llvm::cl::opt<bool> SimplifyIfStatements("simplify-if-statements", llvm::cl::desc("Simplify function bodies by keeping only the first if statement body."), llvm::cl::init(false));
+llvm::cl::opt<bool> SimplifyElseStatements("simplify-else-statements", llvm::cl::desc("Simplify function bodies by keeping only the else statement body."), llvm::cl::init(false));
+llvm::cl::opt<bool> SimplifyElseIfStatements("simplify-else-if-statements", llvm::cl::desc("Simplify function bodies by keeping only the else if statement body."), llvm::cl::init(false));
+
+llvm::cl::list<int> IfElseBlockIndexes("if-else-block-indexes", llvm::cl::desc("Specify the index of the if-else statement occurrence to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> BranchIndexes("branch-indexes", llvm::cl::desc("Specify the index of the branch statement occurrence to modify"), llvm::cl::value_desc("index"));
+
+// Atomic
+llvm::cl::list<int> AtomicBlockIndexes("atomicBlock-indexes", llvm::cl::desc("Specify the indices of the atomic() occurrences to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> AtomicDirectIndexes("atomicDirect-indexes", llvm::cl::desc("Specify the indices of the atomic() occurrences to modify"), llvm::cl::value_desc("index"));
 
 
-cl::list<int> DoubleIndexes("double-indexes", cl::desc("Specify the indices of the double variable occurrences to modify"), cl::value_desc("index"));
+llvm::cl::list<int> DoubleIndexes("double-indexes", llvm::cl::desc("Specify the indices of the double variable occurrences to modify"), llvm::cl::value_desc("index"));
 
-cl::list<int> SyncThreadsNULLIndexes("syncNULL-indexes", cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> SyncThreadsEMPTYIndexes("syncEMPTY-indexes", cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> SyncThreadsWARPIndexes("syncWARP-indexes", cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> SyncThreadsCOOPIndexes("syncCOOP-indexes", cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), cl::value_desc("index"));
-cl::list<int> SyncThreadsACTIVEIndexes("syncACTIVE-indexes", cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), cl::value_desc("index"));
+llvm::cl::list<int> SyncThreadsNULLIndexes("syncNULL-indexes", llvm::cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> SyncThreadsEMPTYIndexes("syncEMPTY-indexes", llvm::cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> SyncThreadsWARPIndexes("syncWARP-indexes", llvm::cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> SyncThreadsCOOPIndexes("syncCOOP-indexes", llvm::cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), llvm::cl::value_desc("index"));
+llvm::cl::list<int> SyncThreadsACTIVEIndexes("syncACTIVE-indexes", llvm::cl::desc("Specify the indices of the __syncthreads() occurrences to modify"), llvm::cl::value_desc("index"));
 
-cl::opt<bool> synchcooperative("synchcooperative", cl::desc("Replace __syncthreads() with cooperative_groups::thread_group tile4_1 = cooperative_groups::tiled_partition(tile32_1, 4); tile4_1.sync();"), cl::init(false));
-cl::opt<bool> synchactive("synchactive", cl::desc("Replace __syncthreads() with cooperative_groups::thread_group active1 = cooperative_groups::coalesced_threads(); active1.sync();"), cl::init(false));
+llvm::cl::opt<bool> synchcooperative("synchcooperative", llvm::cl::desc("Replace __syncthreads() with cooperative_groups::thread_group tile4_1 = cooperative_groups::tiled_partition(tile32_1, 4); tile4_1.sync();"), llvm::cl::init(false));
+llvm::cl::opt<bool> synchactive("synchactive", llvm::cl::desc("Replace __syncthreads() with cooperative_groups::thread_group active1 = cooperative_groups::coalesced_threads(); active1.sync();"), llvm::cl::init(false));
 
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor>
 {
@@ -83,7 +80,7 @@ public:
           currentSyncIndex(0), currentAtomicIndex(0), currentDoubleIndex(0) {}
 
 
-    bool isIndexInList(const cl::list<int>& list, int index) {
+    bool isIndexInList(const llvm::cl::list<int>& list, int index) {
         return std::find(list.begin(), list.end(), index) != list.end();
     }
 
@@ -96,22 +93,10 @@ public:
                     for (auto *item : Body->body()) {
                         if (isa<IfStmt>(item)) {  // Find the 'if' statement
                             currentIfIndex++;
-                            if (isIndexInList(IfIndexes, currentIfIndex)) {
+                            if (isIndexInList(IfElseBlockIndexes, currentIfIndex)) {
                                 simplifyIfStatement(FD, item);
                             }
-                            // Check for else and else-if statements
-                            if (SimplifyElseStatements) {
-                                currentElseIndex++;
-                                if (isIndexInList(ElseIndexes, currentElseIndex)) {
-                                    simplifyElseStatement(FD, item);
-                                }
-                            }
-                            if (SimplifyElseIfStatements) {
-                                currentElseIfIndex++;
-                                if (isIndexInList(ElseIfIndexes, currentElseIfIndex)) {
-                                    simplifyElseIfStatement(FD, item);
-                                }
-                            }
+                          
                         }
                     }
                 }
@@ -565,7 +550,6 @@ private:
                 newText += "\t"+ ptrText + " = " + valueText2 + ";\n";
                 newText += "\t}\n";
             }
-            
 
             else if (functionName == "atomicAND" ) {
 
@@ -596,6 +580,7 @@ private:
         
         }
         
+        return false;
     }
 
     bool isCUDAKernelCall(CallExpr *CE)
